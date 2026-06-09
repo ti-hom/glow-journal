@@ -518,16 +518,19 @@ function renderToday(){
 
 function renderAmSteps(d){
   const steps=config.amSteps;
-  const done=steps.filter(s=>d.steps&&d.steps[s]).length;
+  const bucket=d.amSteps||{};
+  const done=steps.filter(s=>bucket[s]).length;
   document.getElementById('am-prog').style.width=(steps.length?Math.round(done/steps.length*100):0)+'%';
   document.getElementById('am-prog-lbl').textContent=done+'/'+steps.length;
-  document.getElementById('am-steps').innerHTML=steps.map(s=>stepRowHTML(s,!!(d.steps&&d.steps[s]),'#ffd4b8','am')).join('');
+  document.getElementById('am-steps').innerHTML=steps.map(s=>stepRowHTML(s,!!bucket[s],'#ffd4b8','am')).join('');
 }
 function renderPmSteps(d){
   const mode=d.pmMode||'tret';
   const steps=mode==='tret'?config.tretSteps:config.breakSteps;
+  const bucketKey=mode==='tret'?'tretSteps':'breakSteps';
+  const bucket=d[bucketKey]||{};
   const color=mode==='tret'?C.tret:C.brk;
-  const done=steps.filter(s=>d.steps&&d.steps[s]).length;
+  const done=steps.filter(s=>bucket[s]).length;
   document.getElementById('btn-tret').style.background=mode==='tret'?hexRgba(C.tret,0.2):'rgba(255,255,255,0.04)';
   document.getElementById('btn-tret').style.borderColor=mode==='tret'?hexRgba(C.tret,0.5):'rgba(255,255,255,0.08)';
   document.getElementById('btn-tret').style.color=mode==='tret'?C.tret:'rgba(240,230,211,0.4)';
@@ -537,7 +540,7 @@ function renderPmSteps(d){
   document.getElementById('pm-prog').style.width=(steps.length?Math.round(done/steps.length*100):0)+'%';
   document.getElementById('pm-prog').style.background=color;
   document.getElementById('pm-prog-lbl').textContent=done+'/'+steps.length;
-  document.getElementById('pm-steps').innerHTML=steps.map(s=>stepRowHTML(s,!!(d.steps&&d.steps[s]),color,'pm')).join('');
+  document.getElementById('pm-steps').innerHTML=steps.map(s=>stepRowHTML(s,!!bucket[s],color,'pm')).join('');
 }
 function renderSupps(d){
   const done=config.supplements.filter(s=>d.supps&&d.supps[s]).length;
@@ -568,12 +571,18 @@ function stepRowHTML(label,checked,accent,group){
 
 function toggleStep(label,group){
   const d=getDraft();
-  const steps={...(d.steps||{})};
   if(group==='weekly'){
     mutateDraft({weeklyDone:!d.weeklyDone});
-  } else {
-    steps[label]=!steps[label];
-    mutateDraft({steps});
+  } else if(group==='am'){
+    const bucket={...(d.amSteps||{})};
+    bucket[label]=!bucket[label];
+    mutateDraft({amSteps:bucket});
+  } else if(group==='pm'){
+    const mode=d.pmMode||'tret';
+    const bucketKey=mode==='tret'?'tretSteps':'breakSteps';
+    const bucket={...(d[bucketKey]||{})};
+    bucket[label]=!bucket[label];
+    mutateDraft({[bucketKey]:bucket});
   }
   renderToday();
 }
@@ -889,7 +898,7 @@ function renderCalendar(){
   for(let d=1;d<=days;d++){
     const key=calKey(calY,calM,d);
     const l=logs[key];
-    const skin=l&&l.steps&&Object.values(l.steps).some(Boolean);
+    const skin=l&&((l.amSteps&&Object.values(l.amSteps).some(Boolean))||(l.tretSteps&&Object.values(l.tretSteps).some(Boolean))||(l.breakSteps&&Object.values(l.breakSteps).some(Boolean)));
     const nail=l&&l.nails&&l.nails.length>0;
     const isToday=key===todayKey(), isSel=key===selDate;
     let cls='cal-day-btn'+(isToday?' today':'')+(isSel?' selected':'');
@@ -922,9 +931,10 @@ function renderCalSummary(){
   if(!d){ el.innerHTML='<div style="color:rgba(240,230,211,0.28);font-size:13px">Nothing logged.</div>'; return; }
   const rows=[];
   const pm=d.pmMode||'tret';
-  const amDone=(config.amSteps||[]).filter(l=>d.steps&&d.steps[l]);
+  const amDone=(config.amSteps||[]).filter(l=>d.amSteps&&d.amSteps[l]);
   const pmList=pm==='tret'?config.tretSteps:config.breakSteps;
-  const pmDone=(pmList||[]).filter(l=>d.steps&&d.steps[l]);
+  const pmBucket=pm==='tret'?(d.tretSteps||{}):(d.breakSteps||{});
+  const pmDone=(pmList||[]).filter(l=>pmBucket[l]);
   const suppDone=(config.supplements||[]).filter(l=>d.supps&&d.supps[l]);
   if(amDone.length) rows.push({icon:'☀',label:'Morning',items:amDone,color:C.am});
   if(pmDone.length) rows.push({icon:'🌙',label:`Evening (${pm==='tret'?'Tret':'Break'} Night)`,items:pmDone,color:pm==='tret'?C.tret:C.brk});
